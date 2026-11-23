@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pr-sentinel",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-07-01",
+  "account_id": "e38978124c8fdb38dc80c04cda318ab3",
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "pr-sentinel.aswincloud.com", "custom_domain": true }],
+  "ai": { "binding": "AI" },
+  "vars": {
+    "ORG": "Aswincloud",
+    "APP_ID": "1597322",
+    "APP_INSTALLATION_ID": "119111837"
+  }
+  // Secrets (wrangler secret put, never here): WEBHOOK_SECRET, SLACK_WEBHOOK_URL, APP_PRIVATE_KEY.
+}
