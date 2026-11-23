@@ -45,8 +45,9 @@ export async function aiReview(ai: AiBinding, title: string, diff: string): Prom
   } catch {
     return null; // AI is best-effort; rule findings still alert.
   }
-  const text = typeof out === "object" && out && "response" in out ? String((out as { response: unknown }).response) : "";
-  return parseVerdict(text);
+  // Some models return the JSON already parsed as an object; others a string.
+  const resp = typeof out === "object" && out && "response" in out ? (out as { response: unknown }).response : "";
+  return parseVerdict(typeof resp === "string" ? resp : JSON.stringify(resp ?? ""));
 }
 
 export function parseVerdict(text: string): AiVerdict | null {
