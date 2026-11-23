@@ -40,3 +40,5 @@ Secrets (Worker secrets only): `WEBHOOK_SECRET`, `SLACK_WEBHOOK_URL`,
 
 An alarm, not a lock: it alerts after the change exists. Pair it with branch
 rules and protected environments to *prevent* misuse.
+
+Live test: this line exists only to trigger a pull_request event.
