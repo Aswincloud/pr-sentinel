@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scanBranch, scanFiles, scanMessages, worst, type ChangedFile } from "./rules.ts";
-import { parseVerdict } from "./ai.ts";
+import { aiReview, parseVerdict } from "./ai.ts";
 import { verifySignature } from "./webhook.ts";
 
 const patch = (...added: string[]) => added.map((l) => `+${l}`).join("\n");
@@ -108,4 +108,13 @@ test("verifies GitHub HMAC signatures and rejects tampering", async () => {
   assert.equal(await verifySignature("wrong", body, sig), false);
   assert.equal(await verifySignature(secret, body, null), false);
   assert.equal(await verifySignature("", body, sig), false);
+});
+
+test("accepts AI responses returned as a parsed object or as text", async () => {
+  const asObj = { run: async () => ({ response: { risk: "high", reason: "reads secrets" } }) };
+  const asText = { run: async () => ({ response: '{"risk":"medium","reason":"ci change"}' }) };
+  const broken = { run: async () => { throw new Error("down"); } };
+  assert.deepEqual(await aiReview(asObj, "t", "diff"), { risk: "high", reason: "reads secrets" });
+  assert.deepEqual(await aiReview(asText, "t", "diff"), { risk: "medium", reason: "ci change" });
+  assert.equal(await aiReview(broken, "t", "diff"), null);
 });
