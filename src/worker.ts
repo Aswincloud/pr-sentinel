@@ -7,7 +7,7 @@
 // second opinion. Rules alert on their own; the AI can only add.
 
 import { verifySignature } from "./webhook.ts";
-import { scanBranch, scanFiles, scanMessages, worst, type ChangedFile, type Finding } from "./rules.ts";
+import { isVersionOnlyChange, scanBranch, scanFiles, scanMessages, worst, type ChangedFile, type Finding } from "./rules.ts";
 import { aiReview, type AiBinding, type AiVerdict } from "./ai.ts";
 import { appJwt, importPkcs8, mintInstallationToken } from "./github.ts";
 
@@ -132,8 +132,14 @@ async function process(env: Env, event: string, payload: any): Promise<void> {
   const findings = [...scanFiles(c.files), ...scanMessages(c.messages), ...scanBranch(c.ref), ...directPushFindings(c)];
   const ai = c.files.length ? await aiReview(env.AI, c.title, buildDiff(c.files)) : null;
   if (ai && ai.risk !== "low") findings.push({ rule: "ai-flag", severity: ai.risk, file: "(diff)", detail: ai.reason });
-  const level = worst(findings);
-  console.log(JSON.stringify({ event: "scanned", kind: c.kind, repo: c.repo, ref: c.ref, actor: c.actor, files: c.files.length, level, rules: findings.map((f) => f.rule), ai: ai?.risk ?? null }));
+  let level = worst(findings);
+  // Quiet genuine Dependabot version bumps: real dependabot[bot] author (GitHub's
+  // user.login, not a branch name), version-only diff, no high finding, AI not
+  // worried. Anything else in a Dependabot PR still alerts.
+  const dependabotBump = c.kind === "pull_request" && c.actor === "dependabot[bot]" && level !== "high"
+    && (!ai || ai.risk === "low") && isVersionOnlyChange(c.files);
+  if (dependabotBump) level = null;
+  console.log(JSON.stringify({ event: "scanned", dependabot_bump: dependabotBump || undefined, kind: c.kind, repo: c.repo, ref: c.ref, actor: c.actor, files: c.files.length, level, rules: findings.map((f) => f.rule), ai: ai?.risk ?? null }));
   if (!level) return;
   const r = await fetch(env.SLACK_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(slackMessage(c, findings, ai, level)) });
   if (!r.ok) console.log(JSON.stringify({ event: "slack_failed", status: r.status, repo: c.repo }));

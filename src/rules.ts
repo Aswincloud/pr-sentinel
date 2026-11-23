@@ -107,3 +107,37 @@ export function scanBranch(ref: string): Finding[] {
 
 export const worst = (fs: Finding[]): Severity | null =>
   fs.some((f) => f.severity === "high") ? "high" : fs.length ? "medium" : null;
+
+// ---- Dependabot version bumps --------------------------------------------
+//
+// A Dependabot PR is quiet ONLY if every changed line is a version reference.
+// The author check is done by the caller on GitHub's `user.login` (which a
+// branch name cannot fake); this function checks the CONTENT, so a hijacked
+// "dependabot" PR that slips in a new step, script or postinstall still alerts.
+
+const USES_LINE = /^\s*(-\s+)?uses:\s+[\w.-]+\/[\w./-]+@([0-9a-f]{40}|v?\d[\w.-]*)(\s+#\s*v?\d[\w.-]*)?\s*$/;
+const MANIFEST_VERSION_LINE = /^\s*"(@[\w.-]+\/)?[\w.-]+"\s*:\s*"[~^><=]*\s*\d[\w.+-]*"\s*,?\s*$/;
+const LOCKFILE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|go\.sum|Cargo\.lock|poetry\.lock|requirements[\w-]*\.txt)$/;
+const MANIFEST = /(^|\/)(package\.json|go\.mod|Cargo\.toml|pyproject\.toml)$/;
+
+function changedLines(patch = ""): string[] {
+  return patch.split("\n").filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l)).map((l) => l.slice(1));
+}
+
+export function isVersionOnlyChange(files: ChangedFile[]): boolean {
+  if (files.length === 0) return false;
+  for (const f of files) {
+    if (f.status !== "modified") return false; // bumps never add, delete or rename files
+    if (LOCKFILE.test(f.filename)) continue; // generated; its manifest is checked below
+    const lines = changedLines(f.patch).filter((l) => l.trim() !== "");
+    if (f.patch === undefined || lines.length === 0) return false;
+    if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(f.filename)) {
+      if (!lines.every((l) => USES_LINE.test(l))) return false;
+    } else if (MANIFEST.test(f.filename)) {
+      if (!lines.every((l) => MANIFEST_VERSION_LINE.test(l) || /^\s*(require\s+)?[\w./-]+\s+v\d[\w.+-]*\s*$/.test(l))) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
