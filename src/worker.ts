@@ -7,7 +7,7 @@
 // second opinion. Rules alert on their own; the AI can only add.
 
 import { verifySignature } from "./webhook.ts";
-import { isVersionOnlyChange, scanBranch, scanFiles, scanMessages, worst, type ChangedFile, type Finding } from "./rules.ts";
+import { isVersionOnlyChange, matchKnownAutomation, scanBranch, scanFiles, scanMessages, worst, type ChangedFile, type Finding } from "./rules.ts";
 import { aiReview, type AiBinding, type AiVerdict } from "./ai.ts";
 import { appJwt, importPkcs8, mintInstallationToken } from "./github.ts";
 
@@ -101,8 +101,8 @@ function directPushFindings(c: Change): Finding[] {
   const out: Finding[] = [];
   if (c.forced) out.push({ rule: "force-push-default", severity: "high", file: "(branch)", detail: `force push to ${c.ref}` });
   const viaPr = c.messages.length > 0 && c.messages.every((m) => /\(#\d+\)\s*$/.test(m.split("\n")[0] ?? ""));
-  const botReadme = c.actor === "aswincloud-bot[bot]" && c.files.every((f) => /^(README\.md|profile\/README\.md)$/.test(f.filename));
-  if (!viaPr && !botReadme) out.push({ rule: "direct-push-default", severity: "medium", file: "(branch)", detail: "commit on the default branch not from a merged PR" });
+  const known = matchKnownAutomation(c.repo, c.actor, c.files, c.messages);
+  if (!viaPr && !known) out.push({ rule: "direct-push-default", severity: "medium", file: "(branch)", detail: "commit on the default branch not from a merged PR" });
   return out;
 }
 

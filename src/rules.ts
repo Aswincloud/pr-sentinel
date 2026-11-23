@@ -141,3 +141,52 @@ export function isVersionOnlyChange(files: ChangedFile[]): boolean {
   }
   return true;
 }
+
+// ---- Known automations that push straight to the default branch ------------
+//
+// Each entry must match EVERY field: repo (or "*"), pusher login, exact file
+// set, and commit-message prefix. A push by the same bot that touches any
+// other file, or a different message, still raises direct-push-default.
+
+export interface KnownAutomation {
+  name: string;
+  repo: string; // "owner/name" or "*"
+  actor: string; // pusher / sender login
+  files: RegExp; // EVERY changed file must match
+  message?: RegExp; // EVERY commit's first line must match
+}
+
+export const KNOWN_AUTOMATIONS: KnownAutomation[] = [
+  {
+    name: "org README refresh",
+    repo: "Aswincloud/.github",
+    actor: "aswincloud-bot[bot]",
+    files: /^(README\.md|profile\/README\.md)$/,
+    message: /^chore: auto-update public repository list$/,
+  },
+  {
+    name: "filaments-shop stock sync",
+    repo: "Aswincloud/filaments-shop",
+    actor: "github-actions[bot]",
+    files: /^data\/(products|numakers-raw)\.json$/,
+    message: /^Stock sync: /,
+  },
+];
+
+export function matchKnownAutomation(
+  repo: string,
+  actor: string,
+  files: { filename: string; status: string }[],
+  messages: string[],
+  list: KnownAutomation[] = KNOWN_AUTOMATIONS,
+): KnownAutomation | null {
+  if (files.length === 0) return null;
+  for (const a of list) {
+    if (a.repo !== "*" && a.repo !== repo) continue;
+    if (a.actor !== actor) continue;
+    if (!files.every((f) => f.status === "modified" && a.files.test(f.filename))) continue;
+    if (a.message && !(messages.length > 0 && messages.every((m) => a.message!.test(m.split("\n")[0] ?? "")))) continue;
+    return a;
+  }
+  return null;
+}

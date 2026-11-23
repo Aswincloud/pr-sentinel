@@ -147,3 +147,28 @@ test("a 'dependabot' PR that adds anything else is NOT version-only", () => {
   assert.equal(isVersionOnlyChange([{ filename: "src/app.ts", status: "modified", patch: "+export const x = 1;" }]), false);
   assert.equal(isVersionOnlyChange([{ filename: "package-lock.json", status: "modified", patch: "+x" }].slice(0, 0)), false);
 });
+
+// ---- Known automations ----
+import { matchKnownAutomation } from "./rules.ts";
+const stock = [{ filename: "data/products.json", status: "modified" }, { filename: "data/numakers-raw.json", status: "modified" }];
+
+test("the filaments-shop stock sync push is a known automation", () => {
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "github-actions[bot]", stock,
+    ["Stock sync: 13 sold out, 20 back, 0 price changes; 173 variants in stock"])?.name, "filaments-shop stock sync");
+});
+
+test("the same bot touching any other file, or another message/repo/actor, is NOT known", () => {
+  const msg = ["Stock sync: 1 sold out"];
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "github-actions[bot]", [...stock, { filename: ".github/workflows/stock-sync.yml", status: "modified" }], msg), null);
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "github-actions[bot]", [...stock, { filename: "package.json", status: "modified" }], msg), null);
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "github-actions[bot]", stock, ["chore: add ci helper"]), null);
+  assert.equal(matchKnownAutomation("Aswincloud/3d_printing", "github-actions[bot]", stock, msg), null);
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "Aswinmcw", stock, msg), null);
+  assert.equal(matchKnownAutomation("Aswincloud/filaments-shop", "github-actions[bot]", [{ filename: "data/products.json", status: "added" }], msg), null);
+});
+
+test("the org README refresh is a known automation, but only for README files", () => {
+  const readme = [{ filename: "profile/README.md", status: "modified" }];
+  assert.ok(matchKnownAutomation("Aswincloud/.github", "aswincloud-bot[bot]", readme, ["chore: auto-update public repository list"]));
+  assert.equal(matchKnownAutomation("Aswincloud/.github", "aswincloud-bot[bot]", [{ filename: ".github/workflows/x.yml", status: "modified" }], ["chore: auto-update public repository list"]), null);
+});
