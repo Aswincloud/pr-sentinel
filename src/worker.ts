@@ -136,7 +136,10 @@ async function process(env: Env, event: string, payload: any): Promise<void> {
   // Quiet genuine Dependabot version bumps: real dependabot[bot] author (GitHub's
   // user.login, not a branch name), version-only diff, no high finding, AI not
   // worried. Anything else in a Dependabot PR still alerts.
-  const dependabotBump = c.kind === "pull_request" && c.actor === "dependabot[bot]" && level !== "high"
+  // Covers both the PR and the branch push Dependabot makes for it. A push only
+  // counts when it is to a dependabot/* branch (never the default branch).
+  const dependabotBump = c.actor === "dependabot[bot]" && level !== "high"
+    && (c.kind === "pull_request" || (c.kind === "push" && !c.toDefault && c.ref.startsWith("refs/heads/dependabot/")))
     && (!ai || ai.risk === "low") && isVersionOnlyChange(c.files);
   if (dependabotBump) level = null;
   console.log(JSON.stringify({ event: "scanned", dependabot_bump: dependabotBump || undefined, kind: c.kind, repo: c.repo, ref: c.ref, actor: c.actor, files: c.files.length, level, rules: findings.map((f) => f.rule), ai: ai?.risk ?? null }));
